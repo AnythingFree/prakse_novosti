@@ -1,0 +1,50 @@
+name: Site Change Detection
+
+on:
+  schedule:
+    - cron: "0 8 * * *"  # Runs every hour
+  workflow_dispatch:     # Allows manual triggering
+
+permissions:
+  contents: write  # Grant write permissions to the workflow
+
+jobs:
+  check-site:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Run Site Checker
+        run: |
+          echo "script_output=$(python script.py)" >> $GITHUB_ENV
+          if git diff --quiet site_hash.txt; then
+            echo "site_changed=false" >> $GITHUB_ENV
+          else
+            echo "site_changed=true" >> $GITHUB_ENV
+          fi
+
+      - name: Commit and Push Changes
+        if: env.site_changed == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add site_hash.txt
+          git commit -m "bot: Update hash file after site check"
+          git push
+
+      - name: Notify via Discord
+        if: env.site_changed == 'true'
+        run: |
+          curl -H "Content-Type: application/json" \
+          -d "{\"content\":\"${script_output} : https://itkarijera.ba/prakse \"}" \
+           ${{ secrets.DISCORD_WEBHOOK_URL }}
